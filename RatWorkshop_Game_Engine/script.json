@@ -1,0 +1,18 @@
+{
+    "name": "RatWorkshop Game Engine",
+    "script": "ratworkshop_gameengine.js",
+    "version": "0.1",
+    "previousversions": [],
+    "description": "This script provides a Framework for providing AI controlled NPCs to your D&D 5E game. It uses configurable NPC Rules to generate responses for NPCs, freeing the Dungeon Master from having to control every NPC in the game.",
+    "authors": "Patrick Kolenic",
+    "roll20userid": "5259711",
+    "useroptions": [],
+    "dependencies": [],
+    "patreon":"https://www.patreon.com/ratworkshop",
+    "modifies": {
+        "token.*": "read,write",
+        "character.*": "read,write",
+        "attribute.*": "read,write"
+    },
+    "conflicts": []
+}

@@ -1,5 +1,5 @@
 /*
- * Version 0.1
+ * Version 0.3
  * Made By Patrick Kolenic
  * Roll20: https://app.roll20.net/users/5259711/articblast
  * Patreon: https://www.patreon.com/ratworkshop
@@ -375,7 +375,7 @@ class RatWorkshop_Module {
  */
 class DungeonMasterTools extends RatWorkshop_Module {
   static MODULE_NAME = 'DungeonMasterTools';
-  static VERSION = 0.2;
+  static VERSION = 0.3;
   static DEFAULT_STATE = {
     config: {
       'purge-turn-order': 'on',
@@ -383,6 +383,7 @@ class DungeonMasterTools extends RatWorkshop_Module {
     },
     tokenTrack: {
       dead: 'on',
+      health: 'on',
     },
     tokenIcons: {
       dead: 'dead',
@@ -438,6 +439,9 @@ class DungeonMasterTools extends RatWorkshop_Module {
    * Initialize Configurations and update from userOptions
    */
   initialConfigurations() {
+    if (!state.RatWorkShop_DungeonMasterTools_Roll20_5E) {
+      state.RatWorkShop_DungeonMasterTools_Roll20_5E = DungeonMasterTools.DEFAULT_STATE;
+    }
     // For Storing State information
     if (!state.RatWorkShop_DungeonMasterTools_Roll20_5E ||
       !state.RatWorkShop_DungeonMasterTools_Roll20_5E.version ||
@@ -460,7 +464,7 @@ class DungeonMasterTools extends RatWorkshop_Module {
 
     const gc = globalconfig && globalconfig.RatWorkShop_DungeonMasterTools_Roll20_5E;
     if (gc && gc.lastsaved && gc.lastsaved > state.RatWorkShop_DungeonMasterTools_Roll20_5E.gcUpdated) {
-      log('  > Updating from Global Config <  ['+(new Date(g.lastsaved*1000))+']');
+      log('  > Updating from Global Config <  ['+(new Date(gc.lastsaved*1000))+']');
 
       state.RatWorkShop_DungeonMasterTools_Roll20_5E.gcUpdated = gc.lastsaved;
       this.updateConfiguration(state.RatWorkShop_DungeonMasterTools_Roll20_5E.config, gc);
@@ -817,6 +821,40 @@ class DungeonMasterTools extends RatWorkshop_Module {
     token.set(token_status);
   }
 
+  tokenTrackHealth(token) {
+    if (token) {
+      const token_bar = this.tokenBars.hp;
+      if (!token_bar || token.get(`${token_bar}_max`) === "") {
+        return;
+      }
+
+      const characterId = token.get('represents');
+      const character = getObj("character", characterId);
+      if (character) {
+        const traits = filterObjs((obj) => {
+          if (obj.get('type') !== 'attribute') return false;
+          if (obj.get('characterid') !== characterId) return false;
+          if (obj.get('name') === 'hp') return true;
+          if (obj.get('name') === 'npc') return true;
+        });
+        // Only Track for npcs
+        if (traits.length === 2) {
+          const hp = traits.filter(obj => { return obj.get('name') === 'hp';})[0];
+          const currentHp = token.get(`${token_bar}_value`);
+          const maxHp = parseFloat(hp.get('max'));
+
+          const hpRatio = currentHp / maxHp;
+          const token_status = {
+            status_green: hpRatio >= 0.5,
+            status_yellow: hpRatio < 0.5 && hpRatio >= 0.25,
+            status_red: hpRatio < 0.25
+          };
+          token.set(token_status);
+        }
+      }
+    }
+  }
+
   /** CAMPAIGN CHANGE FUNCTIONS **/
   /**
    * Purge actions from the Turn Order that have an initative value less than zero
@@ -840,20 +878,23 @@ class DungeonMasterTools extends RatWorkshop_Module {
     });
   }
 
-  /**
-   * Applies a visible Aura to all tokens representing the current Character in the Turn Tracker
-   */
-  trackActiveTokens() {
+
+  /** ACTIVE TOKEN **/
+  getTokenAuraOptions(showAura) {
     const aura_index = this.settings.activeToken['aura-index'] || 2;
-    const turnOrder = JSON.parse(Campaign().get('turnorder') || '[]');
     const options = {};
-    // Remove turn aura from previously active tokens
-    options[`showplayers_aura${aura_index}`] = false;
-    options[`playersedit_aura${aura_index}`] = true;
-    options[`aura${aura_index}_radius`] = '';
-    options[`aura${aura_index}_color`] = 'transparent';
+
+    options[`showplayers_aura${aura_index}`] = showAura;
+    options[`playersedit_aura${aura_index}`] = !showAura;
+    options[`aura${aura_index}_radius`] = showAura ? '0.5' : '';
     options[`aura${aura_index}_square`] = false;
-    // clear aura on tokens
+    options[`aura${aura_index}_color`] = showAura ? this.settings.activeToken['aura-color'] || '#ffff00' : 'transparent';
+
+    return options;
+  }
+
+  clearTokenAuras() {
+    const options = this.getTokenAuraOptions(false);
     _.each(this.activeTokens, obj => {
       const tokenId = obj._id || obj.get('id');
       const token = getObj('graphic', tokenId);
@@ -862,29 +903,101 @@ class DungeonMasterTools extends RatWorkshop_Module {
       }
     });
     this.activeTokens.length = 0;
+  }
 
-    // Find all tokens for the current turn and set turn aura on them
-    options[`showplayers_aura${aura_index}`] = true;
-    options[`playersedit_aura${aura_index}`] = false;
-    options[`aura${aura_index}_radius`] = '0.5';
-    options[`aura${aura_index}_color`] = this.settings.activeToken['aura-color'] || '#ffff00';
-    options[`aura${aura_index}_square`] = false;
-    if (turnOrder.length) {
-      const token = getObj('graphic', turnOrder[0].id);
-      if (token) {
-        const tokens = this.getTokens(token.get('represents'));
-        // set aura on tokens
-        _.each(tokens, token => {
-          token.set(options);
-          this.activeTokens.push(token);
-        });
+  /**
+   * Applies a visible Aura to all tokens representing the current Character in the Turn Tracker
+   */
+  trackActiveTokens() {
+    // Get all the Characters that can be focused on
+    const focusableCharacters = this.findAllFocusableCharacters();
+
+    // Remove turn aura from previously active tokens
+    this.clearTokenAuras();
+
+     // Give FOCUS_PLAYER control of all focusable characters
+    this.setCharactersControlledBy(focusableCharacters, FOCUS_PLAYER_ID);
+
+    if (Campaign().get('initiativepage')) {
+      const turnOrder = JSON.parse(Campaign().get('turnorder') || '[]');
+      // Set the Active Tokens
+      if (turnOrder.length) {
+        // Get all Token Ids that correspond to Characters
+        const characterTokenIds = this.findCharacterTokenIds(turnOrder);
+
+        if (characterTokenIds.includes(turnOrder[0].id)) {
+          const token = getObj('graphic', turnOrder[0].id);
+          const character = getObj('character', token.get('represents'));
+          const isFocusable = findObjs({ type: 'attribute', characterid: character.id, name: 'isFocusable' })[0];
+          if (isFocusable) {
+            // Remove all Characters from FOCUS_PLAYER_ID's control
+            this.removedCharactersControlledBy(focusableCharacters, FOCUS_PLAYER_ID);
+
+            // Center Map on active token
+            sendPing(token.get('left'), token.get('top'), token.get('pageid'), null, true, [ GM_PLAYER_ID, FOCUS_PLAYER_ID ]);
+
+            // Give FOCUS_PLAYER_ID control of active token
+            this.setCharactersControlledBy([ character ], FOCUS_PLAYER_ID);
+          }
+
+          const tokens = this.getTokens(token.get('represents'));
+          // set aura on all tokens for the current Turn
+          const options = this.getTokenAuraOptions(true);
+          _.each(tokens, token => {
+            token.set(options);
+            this.activeTokens.push(token);
+          });
+        }
       }
-    }
 
-    // Persist activeTokens to state
-    state.RatWorkShop_DungeonMasterTools_Roll20_5E.activeTurnTokens = this.activeTokens;
+      // Persist activeTokens to state
+      state.RatWorkShop_DungeonMasterTools_Roll20_5E.activeTurnTokens = this.activeTokens;
+    }
+  }
+
+    /** HELPERS **/
+  setCharactersControlledBy(characters, playerId) {
+    _.each(characters, character => {
+      const controlledBy = new Set(character.get('controlledby').split(','));
+      controlledBy.add(playerId);
+      character.set('controlledby', Array.from(controlledBy).join(','))
+    })
+  }
+
+  removedCharactersControlledBy(characters, playerId) {
+     _.each(characters, character => {
+      const controlledBy = new Set(character.get('controlledby').split(','));
+      controlledBy.delete(playerId);
+      character.set('controlledby', Array.from(controlledBy).join(','))
+    })
+  }
+
+  findAllFocusableCharacters() {
+    const focusableCharacters = [];
+    _.each(findObjs({ type: 'character' }), (character) => {
+      const isFocusable = findObjs({ type: 'attribute', characterid: character.id, name: 'isFocusable' })[0];
+      if (isFocusable) {
+        focusableCharacters.push(character);
+      }
+    });
+    return focusableCharacters
+  }
+
+  findCharacterTokenIds(turnOrder) {
+    return turnOrder.reduce((ids, item) => {
+      if (item.id !== '-1') {
+        ids.push(item.id);
+      }
+      return ids;
+    }, []);
   }
 }
-
 // Initialize
 dungeonMasterTools = new DungeonMasterTools();
+
+// PLAYER IDS FOR CURSE-> TODO need to make these setable
+const GM_PLAYER_ID = '-NBZO_TMR6gC9V1Cx5Mb';
+const FOCUS_PLAYER_ID = '-NCDMDxb6OXCO03baYVE';
+// PLAYER IDS FOR TOMB
+const GM_PLAYER_ID = '-M2v4hJTcIyUHNA98aYQ';
+const FOCUS_PLAYER_ID = '-NG-GBiNQjA4GRvA7Tq_';
