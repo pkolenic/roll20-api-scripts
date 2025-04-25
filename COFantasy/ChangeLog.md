@@ -1,15 +1,42 @@
 # COFantasy: Historique des changements (depuis la version 1.0)
 ## 3.15
 ### Capacités
+* Implémentaion d'un prédicat pour Autorité naturelle.
+* Armure de feu
+* Au dessus de la mêlée.
+* Transformation régénéatrice.
+* Implémentation des capacité de forme animale.
+* Vent des âmes de la Voie de Morn
+* Phénix, de la Voie du guérisseur.
+* Possibilité d'avoir un lien de sang vers plus d'un personnage
+* Hémorragie de Pestrilax.
+* Prise en compte de la capacité Tir double pour les attaques à 2 mains.
+* Défi de la Voie du Duelliste
 * Meilleure prise en charge de la spécialisation du guerrier.
 * Implémentation de la version avancée du drain de force de Dominia.
 
 ### Autres améliorations
+* Possibilité d'avoir des escaliers (ou portails) automatiques.
+* Ajout d'options --finEtat et --finEffet pour les attaques.
+* Prise en compte de decrcAttribute pour les actions montrées.
+* Ajout d'un effet temporaire générique.
+* Les cadavres réanimés sont considérés comme chair à canon du nécromancien s'il possède cette capacité.
+* Ajout de la possibilité de drainer de la mana.
+* Ajout du poison paralysant
+* Ajout d'une option --depensePR pour les actions autres que les attaques
+* Ajout d'une commande !cof-recupere-mana.
+* Règle optionnelle pour faire récupérer des points de mana quand on dépense un point de récupération.
+* Implémentation de prédicats pour les bonus en RD et aux caractéristiques.
+* Prise en compte des émissaires du dragon pour les ancres.
+* Amélioration de la gestion des utilisations de points de chance pour des attaques complexes.
+* Réinitialisation des options d'attaque à la fin d'un combat
+* Synchronisation des barres de tokens quand on le pose : Roll20 ne le fait plus correctement.
 * Extension des mécanismes d'escaliers pour Invincible.
 * Ajout d'un bonus magique pour absorber un coup ou un sort quand le bouclier est magique.
 * Prise en charge de plusieurs casque à mettre depuis le statut
 
 ### Correction de bugs
+* Correction d'un bug pour les conditions d'attaque sur les attributs.
 * Correction pour les armes en main des mooks
 * Ne pas demander qu'un PNJ ait un prédicat pour se battre à 2 armes sans malus.
 
